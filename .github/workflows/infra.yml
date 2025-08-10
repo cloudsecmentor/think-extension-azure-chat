@@ -1,0 +1,140 @@
+name: Infra Deployment - Terraform Apply
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/infra.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  AZURE_REGION: ${{ vars.AZURE_REGION }}
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Select subscription
+        run: az account set --subscription $AZURE_SUBSCRIPTION_ID
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.5
+
+      - name: Terraform Init
+        working-directory: infra
+        run: terraform init -upgrade
+
+      - name: Terraform Import existing resources (idempotent)
+        working-directory: infra
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ env.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP: ${{ env.AZURE_RESOURCE_GROUP }}
+          ACR_NAME: ${{ vars.ACR_NAME }}
+          WEBAPP_NAME: ${{ vars.WEBAPP_NAME }}
+          PLAN_NAME: ${{ vars.APP_SERVICE_PLAN_NAME }}
+          TF_INPUT: "false"
+          TF_IN_AUTOMATION: "true"
+          TF_VAR_subscription_id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_location: ${{ env.AZURE_REGION }}
+          TF_VAR_resource_group_name: ${{ env.AZURE_RESOURCE_GROUP }}
+          TF_VAR_acr_name: ${{ vars.ACR_NAME }}
+          TF_VAR_webapp_name: ${{ vars.WEBAPP_NAME }}
+          TF_VAR_app_service_plan_name: ${{ vars.APP_SERVICE_PLAN_NAME }}
+        run: |
+          set -euo pipefail
+          # Default plan name if not provided via vars
+          if [ -z "${PLAN_NAME:-}" ]; then PLAN_NAME="aspsidecarhelloworld01"; fi
+
+          # Import Resource Group if exists
+          if az group show -n "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1; then
+            terraform import -no-color -input=false azurerm_resource_group.rg \
+              "/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$AZURE_RESOURCE_GROUP" || true
+          fi
+
+          # Import ACR if exists
+          if az acr show -n "$ACR_NAME" -g "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1; then
+            ACR_ID=$(az acr show -n "$ACR_NAME" -g "$AZURE_RESOURCE_GROUP" --query id -o tsv)
+            terraform import -no-color -input=false azurerm_container_registry.acr "$ACR_ID" || true
+          fi
+
+          # Import App Service Plan if exists (normalize serverFarms segment casing expected by provider)
+          if az appservice plan show -n "$PLAN_NAME" -g "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1; then
+            ASP_ID="/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$AZURE_RESOURCE_GROUP/providers/Microsoft.Web/serverFarms/$PLAN_NAME"
+            terraform import -no-color -input=false azurerm_service_plan.asp "$ASP_ID" || true
+          fi
+
+          # Import Web App if exists
+          if az webapp show -n "$WEBAPP_NAME" -g "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1; then
+            APP_ID=$(az webapp show -n "$WEBAPP_NAME" -g "$AZURE_RESOURCE_GROUP" --query id -o tsv)
+            terraform import -no-color -input=false azurerm_linux_web_app.app "$APP_ID" || true
+          fi
+
+      - name: Terraform Apply
+        working-directory: infra
+        env:
+          TF_VAR_subscription_id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_location: ${{ env.AZURE_REGION }}
+          TF_VAR_resource_group_name: ${{ env.AZURE_RESOURCE_GROUP }}
+          TF_VAR_acr_name: ${{ vars.ACR_NAME }}
+          TF_VAR_webapp_name: ${{ vars.WEBAPP_NAME }}
+          TF_VAR_app_service_plan_name: ${{ vars.APP_SERVICE_PLAN_NAME }}
+        run: terraform apply -auto-approve
+
+      - name: Ensure Web App identity exists and has AcrPull
+        env:
+          WEBAPP_NAME: ${{ vars.WEBAPP_NAME }}
+          ACR_NAME: ${{ vars.ACR_NAME }}
+        run: |
+          set -euo pipefail
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+
+          # Check identity status
+          IDENTITY_TYPE=$(az webapp show -g "$AZURE_RESOURCE_GROUP" -n "$WEBAPP_NAME" --query identity.type -o tsv || echo "")
+          if [ "$IDENTITY_TYPE" = "None" ] || [ -z "$IDENTITY_TYPE" ]; then
+            echo "Web App has no system-assigned identity; creating it..."
+            az webapp identity assign -g "$AZURE_RESOURCE_GROUP" -n "$WEBAPP_NAME" 1>/dev/null
+          else
+            echo "Web App identity present: $IDENTITY_TYPE"
+          fi
+
+          PRINCIPAL_ID=$(az webapp identity show -g "$AZURE_RESOURCE_GROUP" -n "$WEBAPP_NAME" --query principalId -o tsv)
+          ACR_ID=$(az acr show --name "$ACR_NAME" --query id -o tsv)
+
+          # Check existing AcrPull assignment
+          HAS_PULL=$(az role assignment list --assignee "$PRINCIPAL_ID" --scope "$ACR_ID" --role "AcrPull" --query "[0].roleDefinitionName" -o tsv || true)
+          if [ "$HAS_PULL" = "AcrPull" ]; then
+            echo "AcrPull already assigned to Web App identity on ACR."
+          else
+            echo "Assigning AcrPull to Web App identity on ACR..."
+            az role assignment create --assignee "$PRINCIPAL_ID" --role AcrPull --scope "$ACR_ID"
+          fi
+
+      - name: Configure Web App to use MSI for ACR pulls
+        env:
+          WEBAPP_NAME: ${{ vars.WEBAPP_NAME }}
+        run: |
+          set -euo pipefail
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+          CONFIG_ID="/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$AZURE_RESOURCE_GROUP/providers/Microsoft.Web/sites/$WEBAPP_NAME/config/web"
+          az resource update --ids "$CONFIG_ID" --set properties.acrUseManagedIdentityCreds=true 1>/dev/null
+          echo "Enabled acrUseManagedIdentityCreds via resource update"
+
