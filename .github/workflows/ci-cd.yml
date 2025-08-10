@@ -88,19 +88,19 @@ jobs:
           # JSON
 
           # API main container
-            az rest --method PUT \
-              --url https://management.azure.com${APP_ID}/sitecontainers/api?api-version=${API_VER} \
-              --body @- <<'JSON'
-            {
-              "name": "api",
-              "properties": {
-                "image": "${{ vars.ACR_NAME }}.azurecr.io/api:latest",
-                "isMain": true,
-                "targetPort": 5000,
-                "authType": "SystemIdentity"
-              }
+          az rest --method PUT \
+            --url https://management.azure.com${APP_ID}/sitecontainers/api?api-version=${API_VER} \
+            --body @- <<'JSON'
+          {
+            "name": "api",
+            "properties": {
+              "image": "${{ vars.ACR_NAME }}.azurecr.io/api:latest",
+              "isMain": true,
+              "targetPort": 5000,
+              "authType": "SystemIdentity"
             }
-            JSON
+          }
+          JSON
 
           # Switch site to Sidecar mode
           az webapp config set --resource-group $AZURE_RESOURCE_GROUP --name ${{ vars.WEBAPP_NAME }} --linux-fx-version "sitecontainers"
