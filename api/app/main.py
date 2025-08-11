@@ -5,7 +5,7 @@ import logging
 from typing import Any, List, Optional
 from uuid import UUID, uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.responses import JSONResponse
 
 from app.schemas import ThinkRequest
@@ -66,12 +66,12 @@ async def think(request: ThinkRequest):
     )
 
 @app.post("/think/v2")
-async def think_v2(request: str):
+async def think_v2(payload: Any = Body(...)):
     """
-    This endpoint is used to just print out the request and return a 200 OK and message "Hello World".
+    Accepts arbitrary JSON payload and returns a 200 OK with a static message.
     """
-    logger.info("Received request: %s", request)
-    return JSONResponse(content={"message": "Hello World"}, status_code=200) 
+    logger.info("Received request: %s", payload)
+    return JSONResponse(content={"message": "Hello World"}, status_code=200)
 
 
 async def process_job(
