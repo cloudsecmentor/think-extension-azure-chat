@@ -34,6 +34,7 @@ async def on_startup() -> None:
 
 @app.post("/think")
 async def think(request: ThinkRequest):
+    logger.info("Received request: %s", request)
     store: JobStore = app.state.job_store
 
     # Polling mode: id present, no new query
