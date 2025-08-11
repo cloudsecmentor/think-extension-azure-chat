@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.responses import JSONResponse
 
-from app.schemas import ThinkRequest
+from app.schemas import ThinkRequest, AsyncThinkRequest
 from app.store import JobStatus, JobStore
 from app.utils.mock_llm import generate_mock_reply
 
@@ -34,6 +34,12 @@ async def on_startup() -> None:
 
 @app.post("/think")
 async def think(request: ThinkRequest):
+    logger.info("Received request: %s", request)
+    reply = await generate_mock_reply(user_query=request.user_query, history=request.history)
+    return JSONResponse(content={"message": reply}, status_code=200)
+
+@app.post("/asyncthink")
+async def asyncthink(request: AsyncThinkRequest):
     logger.info("Received request: %s", request)
     store: JobStore = app.state.job_store
 
