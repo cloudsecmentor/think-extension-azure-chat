@@ -65,6 +65,14 @@ async def think(request: ThinkRequest):
         ),
     )
 
+@app.post("/think/v2")
+async def think_v2(request: str):
+    """
+    This endpoint is used to just print out the request and return a 200 OK and message "Hello World".
+    """
+    logger.info("Received request: %s", request)
+    return JSONResponse(content={"message": "Hello World"}, status_code=200) 
+
 
 async def process_job(
     job_id: UUID, history: Optional[List[Any]], user_query: str, store: JobStore
