@@ -5,20 +5,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 # Create and set workdir
-WORKDIR /api
+WORKDIR /agent
 
 # Install runtime dependencies
 RUN pip install --no-cache-dir \
     fastapi \
     "uvicorn[standard]" \
-    pydantic \
-    httpx
+    pydantic
 
 # Copy application code
 COPY app/ ./app/
 
-# Expose the FastAPI default port
-EXPOSE 5000
+# Expose the Agent port
+EXPOSE 5500
 
 # Start the server
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5500"]
+
+

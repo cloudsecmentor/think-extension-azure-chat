@@ -7,6 +7,14 @@ services:
       - "5000:5000"
     networks:
       - app
+  agent:
+    build:
+      context: ../agent
+    container_name: agent
+    ports:
+      - "5500:5500"
+    networks:
+      - app
 
 networks:
   app:
