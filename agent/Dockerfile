@@ -11,7 +11,11 @@ WORKDIR /agent
 RUN pip install --no-cache-dir \
     fastapi \
     "uvicorn[standard]" \
-    pydantic
+    pydantic \
+    langchain-openai \
+    langchain-core \
+    azure-identity \
+    python-dotenv
 
 # Copy application code
 COPY app/ ./app/

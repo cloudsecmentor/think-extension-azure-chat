@@ -13,6 +13,8 @@ services:
     container_name: agent
     ports:
       - "5500:5500"
+    env_file:
+      - ../agent/.env
     networks:
       - app
 
