@@ -25,7 +25,7 @@ app = FastAPI(
 
 @app.post("/agent")
 async def agent(request: AgentRequest):
-    logger.info("Received agent request: %s", request)
+    logger.info(f"Received agent request: {request}")
     reply = await generate_reply(user_query=request.user_query, history=request.history)
     # reply = await generate_mock_reply(user_query=request.user_query, history=request.history)
 

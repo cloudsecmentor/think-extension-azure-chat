@@ -32,22 +32,22 @@ AGENT_URL = os.getenv("AGENT_URL", "http://agent:5500")
 async def call_agent_service(user_query: str, history: Optional[List[Any]]) -> str:
     url = f"{AGENT_URL}/agent"
     payload: dict[str, Any] = {"user_query": user_query, "history": history}
-    logger.info("Calling agent at %s", url)
+    logger.info(f"Calling agent at {url}")
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(url, json=payload)
             response.raise_for_status()
     except httpx.RequestError as exc:
-        logger.exception("Failed to reach agent service: %s", exc)
+        logger.exception(f"Failed to reach agent service: {exc}")
         raise HTTPException(status_code=502, detail="Agent service unavailable") from exc
     except httpx.HTTPStatusError as exc:
-        logger.exception("Agent service returned error: %s", exc)
+        logger.exception(f"Agent service returned error: {exc}")
         raise HTTPException(status_code=502, detail="Agent service error") from exc
 
     data = response.json()
     reply = data.get("message")
     if not isinstance(reply, str):
-        logger.error("Invalid response from agent: %s", data)
+        logger.error(f"Invalid response from agent: {data}")
         raise HTTPException(status_code=502, detail="Invalid response from agent")
     return reply
 
@@ -60,13 +60,13 @@ async def on_startup() -> None:
 
 @app.post("/think")
 async def think(request: ThinkRequest):
-    logger.info("Received request: %s", request)
+    logger.info(f"Received request: {request}")
     reply = await call_agent_service(user_query=request.user_query, history=request.history)
     return JSONResponse(content={"message": reply}, status_code=200)
 
 @app.post("/asyncthink")
 async def asyncthink(request: AsyncThinkRequest):
-    logger.info("Received request: %s", request)
+    logger.info(f"Received request: {request}")
     store: JobStore = app.state.job_store
 
     # Polling mode: id present, no new query
@@ -110,7 +110,7 @@ async def think_v2(payload: Any = Body(...)):
 async def process_job(
     job_id: UUID, history: Optional[List[Any]], user_query: str, store: JobStore
 ) -> None:
-    logger.info("Started processing request %s", job_id)
+    logger.info(f"Started processing request {job_id}")
     reply = await call_agent_service(user_query=user_query, history=history)
     await store.set_result(job_id, reply)
-    logger.info("Completed processing request %s", job_id)
+    logger.info(f"Completed processing request {job_id}")

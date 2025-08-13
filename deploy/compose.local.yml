@@ -18,6 +18,17 @@ services:
     networks:
       - app
 
+  mcp:
+    build:
+      context: ../mcp
+    container_name: mcp
+    ports:
+      - "8801:8801"  # web_docs (HTTP stream)
+    env_file:
+      - ../mcp/web_docs/.env
+    networks:
+      - app
+
 networks:
   app:
     driver: bridge

@@ -92,18 +92,22 @@ async def generate_reply(user_query: str, history: Optional[List[Any]] = None) -
         HumanMessage(content=user_query),
     ]
 
-    logger.info("LLM request prepared: endpoint=%s deployment=%s len(history)=%s", os.environ.get("AZURE_OPENAI_ENDPOINT"), os.environ.get("AZURE_OPENAI_DEPLOYMENT"), 0 if history is None else len(history))
+    logger.info(
+        f"LLM request prepared: endpoint={os.environ.get('AZURE_OPENAI_ENDPOINT')} "
+        f"deployment={os.environ.get('AZURE_OPENAI_DEPLOYMENT')} "
+        f"len(history)={(0 if history is None else len(history))}"
+    )
 
     try:
         response = await model.ainvoke(messages)
     except Exception as exc:
-        logger.exception("LLM call failed: %s", exc)
+        logger.exception(f"LLM call failed: {exc}")
         raise
 
     # LangChain ChatResult -> pick the content text
     text: str = response.content if isinstance(response.content, str) else str(response.content)
 
-    logger.info("LLM reply received: %s", text[:500])
+    logger.info(f"LLM reply received: {text[:500]}")
     return text
 
 
