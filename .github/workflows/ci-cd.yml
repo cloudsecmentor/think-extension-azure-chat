@@ -36,10 +36,15 @@ jobs:
           docker build -t ${{ vars.ACR_NAME }}.azurecr.io/api:latest ./api
           docker push ${{ vars.ACR_NAME }}.azurecr.io/api:latest
 
-      # - name: Build and push Frontend image
-      #   run: |
-      #     docker build -t ${{ vars.ACR_NAME }}.azurecr.io/frontend:latest ./frontend
-      #     docker push ${{ vars.ACR_NAME }}.azurecr.io/frontend:latest
+      - name: Build and push Agent image
+        run: |
+          docker build -t ${{ vars.ACR_NAME }}.azurecr.io/agent:latest ./agent
+          docker push ${{ vars.ACR_NAME }}.azurecr.io/agent:latest
+
+      - name: Build and push MCP image
+        run: |
+          docker build -t ${{ vars.ACR_NAME }}.azurecr.io/mcp:latest ./mcp
+          docker push ${{ vars.ACR_NAME }}.azurecr.io/mcp:latest
 
   deploy:
     runs-on: ubuntu-latest
@@ -71,21 +76,38 @@ jobs:
           API_VER=2023-12-01
           REGISTRY=${{ vars.ACR_NAME }}.azurecr.io
 
-          # # sidecar
-          # az rest --method PUT \
-          #   --url https://management.azure.com${APP_ID}/sitecontainers/api?api-version=${API_VER} \
-          #   --body @- <<'JSON'
-          # {
-          #   "name": "api",
-          #   "properties": {
-          #     "image": "${{ vars.ACR_NAME }}.azurecr.io/api:latest",
-          #     "isMain": false,
-          #     "targetPort": 5000,
-          #     "inheritAppSettingsAndConnectionStrings": true,
-          #     "authType": "SystemIdentity"
-          #   }
-          # }
-          # JSON
+          # sidecar agent
+          az rest --method PUT \
+            --url https://management.azure.com${APP_ID}/sitecontainers/agent?api-version=${API_VER} \
+            --body @- <<'JSON'
+          {
+            "name": "agent",
+            "properties": {
+              "image": "${{ vars.ACR_NAME }}.azurecr.io/agent:latest",
+              "isMain": false,
+              "targetPort": 5500,
+              "inheritAppSettingsAndConnectionStrings": true,
+              "authType": "SystemIdentity"
+            }
+          }
+          JSON
+
+          # sidecar mcp
+          az rest --method PUT \
+            --url https://management.azure.com${APP_ID}/sitecontainers/mcp?api-version=${API_VER} \
+            --body @- <<'JSON'
+          {
+            "name": "mcp",
+            "properties": {
+              "image": "${{ vars.ACR_NAME }}.azurecr.io/mcp:latest",
+              "isMain": false,
+              "targetPort": 8801,
+              "inheritAppSettingsAndConnectionStrings": true,
+              "authType": "SystemIdentity"
+            }
+          }
+          JSON
+
 
           # API main container
           az rest --method PUT \
