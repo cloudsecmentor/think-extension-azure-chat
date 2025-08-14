@@ -1,5 +1,6 @@
 import os
 from typing import Optional
+import logging
 
 import httpx
 from bs4 import BeautifulSoup
@@ -12,9 +13,17 @@ import json
 load_dotenv()
 
 mcp = FastMCP(name="web_docs")
+logger = logging.getLogger(__name__)
+
 
 USER_AGENT = "docs-app/1.0"
 SERPAPI_URL = "https://serpapi.com/search"
+
+# Output safety limits to avoid oversized SSE/JSON-RPC frames
+# These can be tuned via env vars if needed
+MAX_PER_PAGE_CHARS = int(os.getenv("MAX_PER_PAGE_CHARS", "400"))
+MAX_RESULTS = int(os.getenv("MAX_RESULTS", "2"))
+MAX_FINAL_CHARS = int(os.getenv("MAX_FINAL_CHARS", "900"))
 
 
 async def search_web(query: str) -> dict | None:
@@ -29,7 +38,7 @@ async def search_web(query: str) -> dict | None:
         "google_domain": "google.com",
         "gl": "us",
         "hl": "en",
-        "num": "3",
+        "num": "5",
     }
 
     # Optional: allow overriding location via env
@@ -58,13 +67,17 @@ async def fetch_url(url: str) -> str:
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "html.parser")
             text = soup.get_text("\n", strip=True)
+            # Cap extremely large pages to keep responses manageable for SSE transport
+            if len(text) > MAX_PER_PAGE_CHARS:
+                text = text[:MAX_PER_PAGE_CHARS] + "\n\n[...content truncated...]"
             return text
         except (httpx.TimeoutException, httpx.HTTPError):
             return ""
 
-
+@mcp.tool()
 async def fetch(url: str, selector: Optional[str] = None, timeout_seconds: int = 20) -> str:
-    """Fetch the textual contents of a web page.
+    """
+    Use this tool to fetch of a web page.
 
     - url: Full URL to fetch (http/https)
     - selector: Optional CSS selector to narrow the content. If omitted, returns page text.
@@ -82,8 +95,8 @@ async def fetch(url: str, selector: Optional[str] = None, timeout_seconds: int =
         text = soup.get_text("\n", strip=True)
 
     # Cap extremely large pages to keep responses manageable
-    if len(text) > 100_000:
-        text = text[:100_000]
+    if len(text) > MAX_PER_PAGE_CHARS:
+        text = text[:MAX_PER_PAGE_CHARS]
 
     return text
 
@@ -99,20 +112,29 @@ async def get_docs(query: str) -> str:
     Returns:
       Aggregated text content from the top results
     """
+    logger.info(f"get_docs invoked with query: {query}")
     results = await search_web(query)
+    logger.info(f"search_web returned: {json.dumps(results, indent=2)[:500]}")
     organic = (results or {}).get("organic_results") or (results or {}).get("organic") or []
     if len(organic) == 0:
         return "No results found"
 
     texts: list[str] = []
-    for result in organic:
+    for result in organic[:MAX_RESULTS]:
         link = result.get("link")
         if not link:
             continue
         content = await fetch_url(link)
         if content:
             texts.append(f"From: {link}\n\n{content}")
-    return "\n\n".join(texts) if texts else "No results found"
+
+    final_content = "\n\n".join(texts) if texts else "No results found"
+    # Final safety cap to keep JSON-RPC message size in a safe range for SSE
+    if len(final_content) > MAX_FINAL_CHARS:
+        # Keep the beginning; append a concise tail marker
+        final_content = final_content[:MAX_FINAL_CHARS] + "\n\n[...aggregated content truncated...]"
+    logger.info(f"get_docs final content length: {len(final_content)}")
+    return final_content
 
 
 def main() -> None:

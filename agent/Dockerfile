@@ -15,7 +15,9 @@ RUN pip install --no-cache-dir \
     langchain-openai \
     langchain-core \
     azure-identity \
-    python-dotenv
+    python-dotenv \
+    httpx \
+    mcp
 
 # Copy application code
 COPY app/ ./app/

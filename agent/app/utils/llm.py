@@ -3,12 +3,18 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from azure.identity import DefaultAzureCredential
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import (
+    AIMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langchain_openai import AzureChatOpenAI
 
+from .mcp_session_manager import get_mcp_session_manager
 
 logger = logging.getLogger("agent_service.llm")
 
@@ -69,6 +75,33 @@ def _serialize_history_for_system_message(history: Optional[List[Any]]) -> str:
         return str(history)
 
 
+def _mcp_tools_to_openai_tools(mcp_tools: List[Any]) -> List[Dict[str, Any]]:
+    tools: List[Dict[str, Any]] = []
+    for tool in mcp_tools:
+        # Obtain JSON schema for the tool parameters in a robust way
+        schema = getattr(tool, "inputSchema", None)
+        if hasattr(schema, "model_dump"):
+            parameters = schema.model_dump()
+        elif hasattr(schema, "dict"):
+            parameters = schema.dict()
+        elif hasattr(schema, "to_dict"):
+            parameters = schema.to_dict()
+        else:
+            parameters = schema
+
+        tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": getattr(tool, "name", "unknown_tool"),
+                    "description": getattr(tool, "description", ""),
+                    "parameters": parameters or {"type": "object", "properties": {}},
+                },
+            }
+        )
+    return tools
+
+
 async def generate_reply(user_query: str, history: Optional[List[Any]] = None) -> str:
     """Generate a reply using Azure OpenAI via LangChain.
 
@@ -83,14 +116,12 @@ async def generate_reply(user_query: str, history: Optional[List[Any]] = None) -
     base_system = (
         "You are a helpful assistant. If prior conversation history is provided, "
         "use it to maintain context, but do not repeat it back verbatim."
+        "At the end of your response you have to provide list of all tools you used in your response."
     )
     history_blob = _serialize_history_for_system_message(history)
     system_content = base_system if not history_blob else f"{base_system}\n\nHistory (raw):\n{history_blob}"
 
-    messages = [
-        SystemMessage(content=system_content),
-        HumanMessage(content=user_query),
-    ]
+    messages: List[Any] = [SystemMessage(content=system_content), HumanMessage(content=user_query)]
 
     logger.info(
         f"LLM request prepared: endpoint={os.environ.get('AZURE_OPENAI_ENDPOINT')} "
@@ -98,15 +129,145 @@ async def generate_reply(user_query: str, history: Optional[List[Any]] = None) -
         f"len(history)={(0 if history is None else len(history))}"
     )
 
+    # If MCP is configured, engage tool loop similar to the _dev example
+    max_tool_calls = int(os.environ.get("MAX_TOOL_CALL", "4"))
+    # Prefer HTTP MCP via config.json if present
+    mcp_manager = get_mcp_session_manager()
+    await mcp_manager.initialize()
+    connected_servers = await mcp_manager.get_connected_servers()
+
+    if connected_servers:
+        try:
+            logger.info(f"Using {len(connected_servers)} connected MCP servers.")
+
+            # Aggregate tools across servers
+            namespaced_tools: List[Dict[str, Any]] = []
+            name_to_route: Dict[str, Dict[str, Any]] = {}
+            for srv in connected_servers:
+                srv_name = srv["name"]
+                session = srv["session"]
+                mcp_tool_list = (await session.list_tools()).tools
+                for tool in mcp_tool_list:
+                    original_name = getattr(tool, "name", "unknown_tool")
+                    namespaced_name = f"{srv_name}__{original_name}"
+
+                    # Translate schema
+                    schema = getattr(tool, "inputSchema", None)
+                    if hasattr(schema, "model_dump"):
+                        parameters = schema.model_dump()
+                    elif hasattr(schema, "dict"):
+                        parameters = schema.dict()
+                    elif hasattr(schema, "to_dict"):
+                        parameters = schema.to_dict()
+                    else:
+                        parameters = schema
+
+                    namespaced_tools.append(
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": namespaced_name,
+                                "description": getattr(tool, "description", ""),
+                                "parameters": parameters or {"type": "object", "properties": {}},
+                            },
+                        }
+                    )
+                    name_to_route[namespaced_name] = {
+                        "session": session,
+                        "original_name": original_name,
+                    }
+
+            tool_enabled_model = model.bind_tools(namespaced_tools)
+
+            tool_calls_used = 0
+            while True:
+                response: AIMessage = await tool_enabled_model.ainvoke(messages)
+
+                if getattr(response, "tool_calls", None):
+                    messages.append(response)
+                    for tool_call in response.tool_calls:
+                        if tool_calls_used >= max_tool_calls:
+                            logger.info(
+                                f"MAX_TOOL_CALL reached ({max_tool_calls}). Forcing final answer without more tools."
+                            )
+                            messages.append(
+                                SystemMessage(
+                                    content=(
+                                        "Tool call limit reached. Provide the best possible answer "
+                                        "using available information and previously returned tool results."
+                                    )
+                                )
+                            )
+                            final = await tool_enabled_model.ainvoke(messages)
+                            final_text: str = (
+                                final.content if isinstance(final.content, str) else str(final.content)
+                            )
+                            logger.info(f"LLM final reply (limit reached): {final_text[:500]}")
+                            return final_text
+
+                        name = tool_call.get("name") if isinstance(tool_call, dict) else getattr(tool_call, "name", None)
+                        args = tool_call.get("args") if isinstance(tool_call, dict) else getattr(tool_call, "args", {})
+                        tool_call_id = tool_call.get("id") if isinstance(tool_call, dict) else getattr(tool_call, "id", None)
+
+                        route = name_to_route.get(name or "")
+                        if not route:
+                            logger.warning(f"No route found for tool '{name}', skipping")
+                            continue
+                        session = route["session"]
+                        original_name = route["original_name"]
+
+                        logger.info(f"Calling MCP tool: {name} -> {original_name} with args: {args}")
+                        try:
+                            result = await session.call_tool(original_name, args)
+                        except Exception as tool_exc:
+                            logger.exception(f"MCP tool '{name}' failed: {tool_exc}")
+                            messages.append(
+                                ToolMessage(
+                                    content=f"Tool '{name}' execution error: {tool_exc}",
+                                    tool_call_id=tool_call_id or (name or "tool"),
+                                )
+                            )
+                            tool_calls_used += 1
+                            continue
+
+                        if hasattr(result, "content"):
+                            tool_content = json.dumps(
+                                getattr(result, "content"), ensure_ascii=False, default=str
+                            )
+                        else:
+                            tool_content = json.dumps(result, ensure_ascii=False, default=str)
+
+                        logger.info(f"MCP tool '{name}' reply: {tool_content[:500]}")
+
+                        messages.append(
+                            ToolMessage(
+                                content=tool_content,
+                                tool_call_id=tool_call_id or (name or "tool"),
+                            )
+                        )
+                        tool_calls_used += 1
+
+                    continue
+
+                final_text: str = (
+                    response.content if isinstance(response.content, str) else str(response.content)
+                )
+                logger.info(f"LLM reply received: {final_text[:500]}")
+                return final_text
+
+        except Exception as exc:
+            logger.exception(
+                f"MCP HTTP flow failed (falling back to plain LLM): {exc}"
+            )
+
+    # Plain LLM call without MCP tools
     try:
         response = await model.ainvoke(messages)
     except Exception as exc:
         logger.exception(f"LLM call failed: {exc}")
         raise
 
-    # LangChain ChatResult -> pick the content text
     text: str = response.content if isinstance(response.content, str) else str(response.content)
-
     logger.info(f"LLM reply received: {text[:500]}")
     return text
 

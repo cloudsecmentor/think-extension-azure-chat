@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import logging
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
-from app.schemas import AgentRequest
-from app.utils.llm import generate_reply
+from .utils.llm import generate_reply
+from .utils.mcp_session_manager import get_mcp_session_manager
 
 
 logger = logging.getLogger("agent_service")
@@ -21,6 +23,25 @@ app = FastAPI(
     description="FastAPI application exposing a mocked agent endpoint.",
     version="0.1.0",
 )
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize MCP session manager on application startup."""
+    logger.info("Application startup: Initializing MCP connections.")
+    mcp_manager = get_mcp_session_manager()
+    await mcp_manager.initialize()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Close MCP connections on application shutdown."""
+    logger.info("Application shutdown: Closing MCP connections.")
+    mcp_manager = get_mcp_session_manager()
+    await mcp_manager.close()
+
+class AgentRequest(BaseModel):
+    user_query: str
+    history: Optional[List[Any]] = Field(default_factory=list)
 
 
 @app.post("/agent")
