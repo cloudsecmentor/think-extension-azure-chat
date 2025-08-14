@@ -116,7 +116,9 @@ async def generate_reply(user_query: str, history: Optional[List[Any]] = None) -
     base_system = (
         "You are a helpful assistant. If prior conversation history is provided, "
         "use it to maintain context, but do not repeat it back verbatim."
-        "At the end of your response you have to provide list of all tools you used in your response."
+        "At the end of your response you have to provide:"
+        " 1. list of all tools you used in your response. "
+        " 2. web page addresses you used to get the information."
     )
     history_blob = _serialize_history_for_system_message(history)
     system_content = base_system if not history_blob else f"{base_system}\n\nHistory (raw):\n{history_blob}"

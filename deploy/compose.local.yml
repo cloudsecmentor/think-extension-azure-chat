@@ -24,6 +24,7 @@ services:
     container_name: mcp
     ports:
       - "8801:8801"  # web_docs (HTTP stream)
+      - "8802:8802"  # date server (HTTP stream)
     env_file:
       - ../mcp/web_docs/.env
     networks:

@@ -3,6 +3,10 @@
     {
       "name": "web_docs",
       "address": "http://host.docker.internal:8801/mcp"
+    },
+    {
+      "name": "date",
+      "address": "http://host.docker.internal:8802/mcp"
     }
   ]
 }

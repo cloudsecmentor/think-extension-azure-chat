@@ -12,11 +12,19 @@ def start_web_docs(port: int) -> subprocess.Popen:
     return subprocess.Popen([sys.executable, "main.py"], env=env, cwd=str(web_docs_dir))
 
 
+def start_date_server(port: int) -> subprocess.Popen:
+    env = os.environ.copy()
+    env["PORT"] = str(port)
+    date_dir = Path(__file__).parent / "date"
+    return subprocess.Popen([sys.executable, "main.py"], env=env, cwd=str(date_dir))
+
+
 def main() -> None:
     # Assign fixed ports per server; extend as you add more servers
     processes: list[subprocess.Popen] = []
     try:
         processes.append(start_web_docs(port=8801))
+        processes.append(start_date_server(port=8802))
 
         # Wait indefinitely while children run; forward signals on Docker stop
         for proc in processes:
