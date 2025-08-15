@@ -110,18 +110,53 @@ class MCPSessionManager:
             attempt = 0
             while True:
                 try:
-                    transport_context = streamablehttp_client(
-                        url=address, timeout=timedelta(seconds=60)
-                    )
-                    read_stream, write_stream, _ = await self._exit_stack.enter_async_context(
-                        transport_context
-                    )
-                    session = await self._exit_stack.enter_async_context(
-                        ClientSession(read_stream, write_stream)
-                    )
-                    await session.initialize()
-                    connected.append({"name": name, "address": address, "session": session})
-                    logger.info(f"Connected to MCP server '{name}' at {address}")
+                    # Probe health endpoint before opening stream to avoid creating half-open contexts
+                    health_url = None
+                    if address.endswith("/mcp"):
+                        health_url = address[:-4] + "health"
+                    elif address.endswith("/mcp/"):
+                        health_url = address[:-4] + "health"
+                    else:
+                        # Best-effort: append /health
+                        health_url = address.rstrip("/") + "/health"
+
+                    try:
+                        async with httpx.AsyncClient(timeout=5.0) as client:
+                            resp = await client.get(health_url)
+                            if resp.status_code != 200:
+                                raise RuntimeError(f"Health check failed with status {resp.status_code}")
+                    except Exception as health_exc:
+                        attempt += 1
+                        if attempt > max_retries:
+                            logger.exception(
+                                f"MCP server '{name}' health check failed after {max_retries} retries: {health_exc}"
+                            )
+                            break
+                        delay = min(max_delay_seconds, base_delay_seconds * (2 ** (attempt - 1)))
+                        logger.warning(
+                            f"Health check for MCP server '{name}' at {health_url} failed: {health_exc}. "
+                            f"Retrying in {delay:.1f}s..."
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+
+                    # Open contexts in a temporary stack, initialize, then transfer to the main stack atomically
+                    async with AsyncExitStack() as temp_stack:
+                        transport_context = streamablehttp_client(
+                            url=address, timeout=timedelta(seconds=60)
+                        )
+                        read_stream, write_stream, _ = await temp_stack.enter_async_context(transport_context)
+                        session = await temp_stack.enter_async_context(
+                            ClientSession(read_stream, write_stream)
+                        )
+                        await session.initialize()
+
+                        # Detach resources from temp_stack and attach their close callbacks to the main stack
+                        detached = temp_stack.pop_all()
+                        self._exit_stack.push_async_callback(detached.aclose)
+
+                        connected.append({"name": name, "address": address, "session": session})
+                        logger.info(f"Connected to MCP server '{name}' at {address}")
                     break
                 except Exception as exc:
                     attempt += 1

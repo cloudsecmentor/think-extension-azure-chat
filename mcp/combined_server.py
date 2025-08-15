@@ -1,7 +1,9 @@
 import contextlib
 import os
+import logging
 
 from fastapi import FastAPI
+from starlette.responses import JSONResponse
 
 # Import the FastMCP instances from each server module
 from web_docs.main import mcp as web_docs_mcp
@@ -18,15 +20,33 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+logger = logging.getLogger(__name__)
 
 # Mount each MCP server under a distinct path prefix, each exposing its streamable HTTP app
 app.mount("/web_docs", web_docs_mcp.streamable_http_app())
 app.mount("/date", date_mcp.streamable_http_app())
 
+# Lightweight health checks under each prefix to support sidecar readiness probes and client preflight checks
+@app.get("/web_docs/health")
+async def web_docs_health():
+    return JSONResponse({"status": "ok", "server": "web_docs"})
+
+
+@app.get("/date/health")
+async def date_health():
+    return JSONResponse({"status": "ok", "server": "date"})
+
+
+@app.get("/health")
+async def root_health():
+    return JSONResponse({"status": "ok", "server": "combined"})
+
 
 def main() -> None:
-    port = int(os.environ.get("PORT", "8801"))
+    # Use a dedicated MCP_PORT to avoid platform-provided PORT (e.g., App Service sets PORT=80)
+    port = int(os.environ.get("MCP_PORT") or "8801")
     import uvicorn
+    logger.info(f"Starting MCP combined server on 0.0.0.0:{port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
 
 
