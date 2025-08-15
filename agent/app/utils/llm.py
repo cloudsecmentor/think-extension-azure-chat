@@ -149,6 +149,7 @@ async def generate_reply(user_query: str, history: Optional[List[Any]] = None) -
                 srv_name = srv["name"]
                 session = srv["session"]
                 mcp_tool_list = (await session.list_tools()).tools
+                logger.info(f"MCP tool list: {mcp_tool_list}")
                 for tool in mcp_tool_list:
                     original_name = getattr(tool, "name", "unknown_tool")
                     namespaced_name = f"{srv_name}__{original_name}"
@@ -179,6 +180,7 @@ async def generate_reply(user_query: str, history: Optional[List[Any]] = None) -
                         "original_name": original_name,
                     }
 
+            logger.info(f"Namespaced tools: {namespaced_tools}")
             tool_enabled_model = model.bind_tools(namespaced_tools)
 
             tool_calls_used = 0

@@ -2,11 +2,11 @@
   "mcp_servers": [
     {
       "name": "web_docs",
-      "address": "http://host.docker.internal:8801/mcp"
+      "address": "http://host.docker.internal:8801/web_docs/mcp"
     },
     {
       "name": "date",
-      "address": "http://host.docker.internal:8802/mcp"
+      "address": "http://host.docker.internal:8801/date/mcp"
     }
   ]
 }

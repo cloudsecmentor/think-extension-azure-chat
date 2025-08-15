@@ -13,6 +13,6 @@ COPY . /app
 # Default port for first MCP server (web_docs) via HTTP stream transport
 EXPOSE 8801
 
-CMD ["python", "run_servers.py"]
+CMD ["python", "combined_server.py"]
 
 

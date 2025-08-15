@@ -1,0 +1,14 @@
+{
+  "mcp_servers": [
+    {
+      "name": "web_docs",
+      "address": "http://mcp:8801/web_docs/mcp"
+    },
+    {
+      "name": "date",
+      "address": "http://mcp:8801/date/mcp"
+    }
+  ]
+}
+
+
