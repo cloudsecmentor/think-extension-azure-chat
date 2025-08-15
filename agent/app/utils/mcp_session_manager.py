@@ -45,6 +45,7 @@ class MCPSessionManager:
             
             logger.info("Initializing MCP Session Manager...")
             config = self._load_mcp_config()
+            logger.info(f"MCP config: {config}")
             if config and isinstance(config.get("mcp_servers"), list):
                 servers_cfg: List[Dict[str, Any]] = config["mcp_servers"]
                 self._connected_servers = await self._connect_all(servers_cfg)
