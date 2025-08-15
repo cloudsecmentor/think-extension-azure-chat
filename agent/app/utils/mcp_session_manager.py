@@ -9,6 +9,7 @@ from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 import httpx
+from urllib.parse import urlsplit, urlunsplit
 from langchain_core.messages import (
     AIMessage,
     HumanMessage,
@@ -111,31 +112,46 @@ class MCPSessionManager:
             while True:
                 try:
                     # Probe health endpoint before opening stream to avoid creating half-open contexts
-                    health_url = None
-                    if address.endswith("/mcp"):
-                        health_url = address[:-4] + "health"
-                    elif address.endswith("/mcp/"):
-                        health_url = address[:-4] + "health"
+                    # Build candidate health URLs robustly from the address path and fallbacks
+                    split = urlsplit(address)
+                    path = split.path or "/"
+                    candidates: list[str] = []
+                    if path.endswith("/mcp/"):
+                        candidates.append(path[:-5] + "/health")  # /<prefix>/health
+                    elif path.endswith("/mcp"):
+                        candidates.append(path[:-4] + "/health")
                     else:
-                        # Best-effort: append /health
-                        health_url = address.rstrip("/") + "/health"
+                        candidates.append(path.rstrip("/") + "/health")
+                    # Add parent-level aliases: /health/<name> and root /health
+                    candidates.append(f"/health/{name}")
+                    candidates.append("/health")
 
-                    try:
-                        async with httpx.AsyncClient(timeout=5.0) as client:
-                            resp = await client.get(health_url)
-                            if resp.status_code != 200:
-                                raise RuntimeError(f"Health check failed with status {resp.status_code}")
-                    except Exception as health_exc:
+                    health_ok = False
+                    last_error: Exception | None = None
+                    for hp in candidates:
+                        health_url = urlunsplit((split.scheme, split.netloc, hp, "", ""))
+                        try:
+                            async with httpx.AsyncClient(timeout=5.0) as client:
+                                resp = await client.get(health_url)
+                                if resp.status_code == 200:
+                                    health_ok = True
+                                    break
+                                last_error = RuntimeError(
+                                    f"Health check failed with status {resp.status_code}"
+                                )
+                        except Exception as health_exc:
+                            last_error = health_exc
+
+                    if not health_ok:
                         attempt += 1
                         if attempt > max_retries:
                             logger.exception(
-                                f"MCP server '{name}' health check failed after {max_retries} retries: {health_exc}"
+                                f"MCP server '{name}' health check failed after {max_retries} retries: {last_error}"
                             )
                             break
                         delay = min(max_delay_seconds, base_delay_seconds * (2 ** (attempt - 1)))
                         logger.warning(
-                            f"Health check for MCP server '{name}' at {health_url} failed: {health_exc}. "
-                            f"Retrying in {delay:.1f}s..."
+                            f"Health check for MCP server '{name}' failed: {last_error}. Retrying in {delay:.1f}s..."
                         )
                         await asyncio.sleep(delay)
                         continue

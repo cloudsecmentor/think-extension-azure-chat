@@ -42,6 +42,16 @@ async def root_health():
     return JSONResponse({"status": "ok", "server": "combined"})
 
 
+@app.get("/health/web_docs")
+async def health_web_docs_alias():
+    return JSONResponse({"status": "ok", "server": "web_docs"})
+
+
+@app.get("/health/date")
+async def health_date_alias():
+    return JSONResponse({"status": "ok", "server": "date"})
+
+
 def main() -> None:
     # Use a dedicated MCP_PORT to avoid platform-provided PORT (e.g., App Service sets PORT=80)
     port = int(os.environ.get("MCP_PORT") or "8801")

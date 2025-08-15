@@ -36,10 +36,8 @@ async def date_now() -> str:
 
 def main() -> None:
     port = int(os.getenv("PORT", "8801"))
-
-    @mcp.custom_route("/health", methods=["GET"])
-    async def health_check(request):  # type: ignore[unused-ignore]
-        return JSONResponse({"status": "ok", "server": "date"})
+    
+    # Health route defined at import time below; leaving here ensures PORT is set but route exists earlier
 
     mcp.settings.host = "0.0.0.0"
     mcp.settings.port = port
@@ -51,5 +49,11 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         pass
+
+
+# Expose module-level health endpoint so it is available when this module is imported
+@mcp.custom_route("/health", methods=["GET"])
+async def health_check(request):  # type: ignore[unused-ignore]
+    return JSONResponse({"status": "ok", "server": "date"})
 
 

@@ -26,6 +26,12 @@ MAX_RESULTS = int(os.getenv("MAX_RESULTS", "2"))
 MAX_FINAL_CHARS = int(os.getenv("MAX_FINAL_CHARS", "900"))
 
 
+# Expose module-level health endpoint so it is available when this module is imported
+@mcp.custom_route("/health", methods=["GET"])
+async def health_check(request):  # type: ignore[unused-ignore]
+    return JSONResponse({"status": "ok", "server": "web_docs"})
+
+
 async def search_web(query: str) -> dict | None:
     api_key = os.getenv("SERPAPI_API_KEY") or os.getenv("SERPER_API_KEY")
     if not api_key:
@@ -139,10 +145,6 @@ async def get_docs(query: str) -> str:
 
 def main() -> None:
     port = int(os.getenv("PORT", "8801"))
-
-    @mcp.custom_route("/health", methods=["GET"])
-    async def health_check(request):
-        return JSONResponse({"status": "ok", "server": "web_docs"})
 
     # Run using HTTP Stream transport
     mcp.settings.host = "0.0.0.0"
