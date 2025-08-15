@@ -89,6 +89,7 @@ class MCPSessionManager:
             return None
 
     async def _connect_all(self, servers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        logger.info(f"_connect_all: Connecting to MCP servers: {servers}")
         if not ClientSession or not streamablehttp_client:
             logger.error("MCP modules not available. Please install 'mcp'.")
             return []
@@ -97,6 +98,7 @@ class MCPSessionManager:
         for server in servers:
             name = server.get("name", "unknown_server")
             address = server.get("address")
+            logger.info(f"Connecting to MCP server '{name}' at {address}")
             if not address:
                 logger.warning(f"Skipping MCP server '{name}' due to missing address.")
                 continue
