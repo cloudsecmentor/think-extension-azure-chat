@@ -30,7 +30,11 @@ async def startup_event():
     """Initialize MCP session manager on application startup."""
     logger.info("Application startup: Initializing MCP connections.")
     mcp_manager = get_mcp_session_manager()
-    await mcp_manager.initialize()
+    try:
+        await mcp_manager.initialize()
+    except Exception as exc:
+        # Do not crash the app if MCP sidecars are not yet ready; we'll retry later or on-demand
+        logger.exception(f"MCP initialization failed during startup: {exc}")
 
 @app.on_event("shutdown")
 async def shutdown_event():

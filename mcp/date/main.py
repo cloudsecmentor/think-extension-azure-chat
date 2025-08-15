@@ -35,7 +35,7 @@ async def date_now() -> str:
 
 
 def main() -> None:
-    port = int(os.getenv("PORT", "8802"))
+    port = int(os.getenv("PORT", "8801"))
 
     @mcp.custom_route("/health", methods=["GET"])
     async def health_check(request):  # type: ignore[unused-ignore]

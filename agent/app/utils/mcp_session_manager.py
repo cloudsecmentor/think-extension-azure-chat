@@ -101,21 +101,39 @@ class MCPSessionManager:
                 logger.warning(f"Skipping MCP server '{name}' due to missing address.")
                 continue
 
-            try:
-                transport_context = streamablehttp_client(
-                    url=address, timeout=timedelta(seconds=60)
-                )
-                read_stream, write_stream, _ = await self._exit_stack.enter_async_context(
-                    transport_context
-                )
-                session = await self._exit_stack.enter_async_context(
-                    ClientSession(read_stream, write_stream)
-                )
-                await session.initialize()
-                connected.append({"name": name, "address": address, "session": session})
-                logger.info(f"Connected to MCP server '{name}' at {address}")
-            except Exception:
-                logger.exception(f"Failed to connect to MCP server '{name}' at {address}")
+            max_retries = int(os.environ.get("MCP_CONNECT_RETRIES", "10"))
+            base_delay_seconds = float(os.environ.get("MCP_CONNECT_BASE_DELAY", "1.0"))
+            max_delay_seconds = float(os.environ.get("MCP_CONNECT_MAX_DELAY", "10.0"))
+
+            attempt = 0
+            while True:
+                try:
+                    transport_context = streamablehttp_client(
+                        url=address, timeout=timedelta(seconds=60)
+                    )
+                    read_stream, write_stream, _ = await self._exit_stack.enter_async_context(
+                        transport_context
+                    )
+                    session = await self._exit_stack.enter_async_context(
+                        ClientSession(read_stream, write_stream)
+                    )
+                    await session.initialize()
+                    connected.append({"name": name, "address": address, "session": session})
+                    logger.info(f"Connected to MCP server '{name}' at {address}")
+                    break
+                except Exception as exc:
+                    attempt += 1
+                    if attempt > max_retries:
+                        logger.exception(
+                            f"Failed to connect to MCP server '{name}' at {address} after {max_retries} retries"
+                        )
+                        break
+                    delay = min(max_delay_seconds, base_delay_seconds * (2 ** (attempt - 1)))
+                    logger.warning(
+                        f"Attempt {attempt}/{max_retries} to connect to MCP server '{name}' at {address} failed: {exc}. "
+                        f"Retrying in {delay:.1f}s..."
+                    )
+                    await asyncio.sleep(delay)
         
         return connected
 
