@@ -26,7 +26,7 @@ app = FastAPI(
     version="0.1.0",
 )
 
-AGENT_URL = os.getenv("AGENT_URL", "http://agent:5500")
+AGENT_URL = os.getenv("AGENT_URL", "http://localhost:5500")
 
 
 async def call_agent_service(user_query: str, history: Optional[List[Any]]) -> str:
