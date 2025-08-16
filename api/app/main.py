@@ -13,6 +13,8 @@ import httpx
 from app.schemas import ThinkRequest, AsyncThinkRequest
 from app.store import JobStatus, JobStore
 
+from dotenv import load_dotenv
+load_dotenv()
 
 logger = logging.getLogger("fastapi_async_chatbot")
 logging.basicConfig(level=logging.INFO)

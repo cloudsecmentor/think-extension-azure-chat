@@ -101,6 +101,9 @@ def _mcp_tools_to_openai_tools(mcp_tools: List[Any]) -> List[Dict[str, Any]]:
         )
     return tools
 
+def _messages_to_text(messages: List[Any]) -> str:
+    # skip the first message (system message)
+    return "\n".join([f"{m.type}: {m.content}" for m in messages[1:]])
 
 async def generate_reply(user_query: str, history: Optional[List[Any]] = None) -> str:
     """Generate a reply using Azure OpenAI via LangChain.
@@ -116,6 +119,7 @@ async def generate_reply(user_query: str, history: Optional[List[Any]] = None) -
     base_system = (
         "You are a helpful assistant. If prior conversation history is provided, "
         "use it to maintain context, but do not repeat it back verbatim."
+        "you need to always use the tools you have available to you."
         "At the end of your response you have to provide:"
         " 1. list of all tools you used in your response. "
         " 2. web page addresses you used to get the information."
@@ -137,6 +141,7 @@ async def generate_reply(user_query: str, history: Optional[List[Any]] = None) -
     mcp_manager = get_mcp_session_manager()
     await mcp_manager.initialize()
     connected_servers = await mcp_manager.get_connected_servers()
+    logger.info(f"Connected servers: {connected_servers}")
 
     if connected_servers:
         try:
@@ -256,8 +261,9 @@ async def generate_reply(user_query: str, history: Optional[List[Any]] = None) -
                 final_text: str = (
                     response.content if isinstance(response.content, str) else str(response.content)
                 )
-                logger.info(f"LLM reply received: {final_text[:500]}")
-                return final_text
+                final_text_and_response = f"{final_text}\n\n#Technical details\n\n{tool_calls_used} tool calls used\n\nraw messages: {_messages_to_text(messages)}"
+                logger.info(f"LLM reply received02: {final_text_and_response[:500]}")
+                return final_text_and_response
 
         except Exception as exc:
             logger.exception(
@@ -272,7 +278,8 @@ async def generate_reply(user_query: str, history: Optional[List[Any]] = None) -
         raise
 
     text: str = response.content if isinstance(response.content, str) else str(response.content)
-    logger.info(f"LLM reply received: {text[:500]}")
-    return text
+    text_and_response = f"No MCP tools used. Plain LLM call without MCP tools: \n{text}\n\nraw messages: {_messages_to_text(messages)}"
+    logger.info(f"LLM reply received03: {text_and_response[:500]}")
+    return text_and_response
 
 

@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir \
     fastapi \
     "uvicorn[standard]" \
     pydantic \
+    python-dotenv \
     httpx
 
 # Copy application code
