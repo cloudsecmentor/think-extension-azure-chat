@@ -42,6 +42,9 @@ This separation keeps AzureChat clean while supporting scalability (e.g., multip
 - **GPT-4**: Reliably shows when it uses a tool and bases answers on its output.  
 - **GPT-5**: Sometimes skips tool usage but formats responses *as if* the tool was invoked. While answers may be correct, logs reveal the tool wasn’t actually called.  
 
+<img src="extras/docs/gpt4o-vs-gpt5.jpg" alt="GPT4o vs GPT5 tool usage" width="600" />
+
+
 ---
 
 ## 💻 FastAPI Asynchronous Chatbot Interface  
