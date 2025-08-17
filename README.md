@@ -71,8 +71,8 @@ API available at: [http://localhost:5000](http://localhost:5000)
 
 ```mermaid
 flowchart TD
-  A[User in AzureChat<br/>(submits complex query)] --> B[Think Extension API<br/>(returns Request ID · HTTP 202)]
-  B -->|forwards request| C[Agent Container<br/>(LLM orchestration)]
+  A[User in AzureChat\n(submits complex query)] --> B[Think Extension API\n(returns Request ID · HTTP 202)]
+  B -->|forwards request| C[Agent Container\n(LLM orchestration)]
   C --> AOAI[(Azure OpenAI Foundry)]
   C --> D1[Tool Container: Web Search (MCP)]
   C --> D2[Tool Container: Doc Retrieval (MCP)]
@@ -80,7 +80,7 @@ flowchart TD
   D1 --> C
   D2 --> C
   D3 --> C
-  C --> B2[Think Extension API<br/>(stores final result)]
+  C --> B2[Think Extension API\n(stores final result)]
   B2 -.-> X[(External DB e.g., Cosmos DB):::optional]
   A <-->|poll with Request ID| B2
   A -->|retrieves final answer| E[Result displayed in AzureChat]
