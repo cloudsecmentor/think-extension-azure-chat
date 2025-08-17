@@ -86,3 +86,9 @@ flowchart TD
   end
 
   classDef optional stroke-dasharray: 5 5,stroke-width:1.5px;
+
+
+# Credits
+- MCP server design is inspired by https://github.com/alejandro-ao/mcp-streamable-http
+- MCP client design is inspired by https://github.com/alejandro-ao/mcp-client-python-example
+- AzureChat https://github.com/microsoft/azurechat
