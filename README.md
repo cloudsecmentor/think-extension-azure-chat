@@ -87,6 +87,8 @@ flowchart TD
 
   classDef optional stroke-dasharray: 5 5,stroke-width:1.5px;
 
+```
+
 
 # Credits
 - MCP server design is inspired by https://github.com/alejandro-ao/mcp-streamable-http
