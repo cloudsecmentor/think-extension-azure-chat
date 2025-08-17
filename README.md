@@ -69,6 +69,7 @@ API available at: [http://localhost:5000](http://localhost:5000)
 
 ### Flowchart
 
+```mermaid
 flowchart TD
   A[User in AzureChat<br/>(submits complex query)] --> B[Think Extension API<br/>(returns Request ID · HTTP 202)]
   B -->|forwards request| C[Agent Container<br/>(LLM orchestration)]
