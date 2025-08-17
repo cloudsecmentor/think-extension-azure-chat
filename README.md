@@ -65,6 +65,7 @@ API available at: [http://localhost:5000](http://localhost:5000)
 ## Architecture
 
 ### Darkboard
+This is an extension of the image from [azurechat](https://github.com/microsoft/azurechat/blob/main/docs/images/private-endpoints.png)
 <img src="extras/docs/think-extension.jpg" alt="Think extension" width="600" />
 
 ### Flowchart
