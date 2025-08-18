@@ -3,6 +3,8 @@ Thinking extension service for [AzureChat](https://github.com/microsoft/azurecha
 
 This repository presents the **Think Extension**, a service developed to enhance AzureChat by enabling asynchronous processing for complex, long-running AI tasks. Instead of modifying AzureChat itself, the Think Extension leverages its function-calling mechanisms to execute tasks asynchronously and return results once complete.  
 
+No time to read? This is audio [deep dive](extras/docs/think-estension.mp3) 
+
 ---
 
 ## 📖 Overview: Extending AzureChat’s Capabilities  
