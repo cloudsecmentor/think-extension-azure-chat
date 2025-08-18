@@ -63,7 +63,83 @@ cd deploy
 docker compose -f compose.local.yml up --build
 ```
 
-API available at: [http://localhost:5000](http://localhost:5000)  
+API available at: [http://localhost:5000](http://localhost:5000), go to http://localhost:5000/docs to test api calls.
+
+## AzureChat settings
+
+- Name: external asynchronous think
+- Short description: Extenstion which will be used to call external thinking service
+- Description: You are expert in solving difficult questions, you are using external thinking service, you send chat history and user question and get the id back. Then you pull the thinking result using this id
+
+Use this definition to send the user reqeust
+
+```json
+{
+  "name": "RequestThink",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "body": {
+        "type": "object",
+        "description": "Submit a new query to be processed",
+        "properties": {
+          "history": {
+            "type": "array",
+            "description": "Conversation history (optional)",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": { "type": "string", "example": "user" },
+                "message": { "type": "string", "example": "Hello" }
+              }
+            },
+            "example": [
+              { "role": "user", "message": "Hello" },
+              { "role": "assistant", "message": "Hi, how can I help?" }
+            ]
+          },
+          "user_query": {
+            "type": "string",
+            "description": "New user question to think about",
+            "example": "What is SITHID?"
+          }
+        },
+        "required": ["user_query"]
+      }
+    },
+    "required": ["body"]
+  },
+  "description": "Submit a new 'think' task. Expect id of the task in return"
+}
+```
+
+
+Use this definition to poll the results
+
+```json
+{
+  "name": "PollThinkByID",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "body": {
+        "type": "object",
+        "description": "Poll for the result of a previously submitted think task",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Request ID returned by SubmitThink",
+            "example": "1234567-e89b-12d3-a456-426614174000"
+          }
+        },
+        "required": ["id"]
+      }
+    },
+    "required": ["body"]
+  },
+  "description": "Submit a new 'think' task. Expect id of the task in return"
+}
+```
 
 ## Architecture
 
