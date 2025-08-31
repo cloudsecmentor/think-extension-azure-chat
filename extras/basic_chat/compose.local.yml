@@ -1,0 +1,17 @@
+services:
+  front:
+    build:
+      context: ../front
+    container_name: think-front
+    env_file:
+      - ../.env
+    ports:
+      - "8501:8501"
+    networks:
+      - app
+
+networks:
+  app:
+    driver: bridge
+
+

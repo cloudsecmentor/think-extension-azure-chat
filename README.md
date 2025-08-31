@@ -46,6 +46,24 @@ This separation keeps AzureChat clean while supporting scalability (e.g., multip
 
 <img src="extras/docs/gpt4o-vs-gpt5.jpg" alt="GPT4o vs GPT5 tool usage" width="600" />
 
+### Known issues
+#### 1. Inconsistent Tool Calling in GPT-5-chat
+
+Several developers have reported that GPT‑5-chat occasionally behaves as you described—claiming to use a tool without actually doing so, or failing to initiate calls reliably.
+
+
+This aligns with comments in Azure and OpenAI forums noting that GPT‑5‑chat isn’t a reasoning model and that support for tool usage is inconsistent. Some users have even had the model act like it's “thinking” or formatting a function call when no actual tool execution occurs.
+
+- https://learn.microsoft.com/en-us/answers/questions/5517434/gpt-5-deployed-to-azure-ai-foundry-thinking-then-t?utm_source=chatgpt.com
+- https://community.openai.com/t/gpt-5-breaks-the-agents-sdk-and-tool-calling/1341727?utm_source=chatgpt.com 
+
+#### 2. Strict Function Schema Enforcement
+
+GPT‑5 imposes stricter rules around schema validation for function/tool calls. Missing required parameters (even subtle ones like required in JSON schemas) can prevent tool invocation altogether, even though the model’s output may still indicate that a tool was used.
+
+#### 3. You May Be Enabling “Minimal Reasoning Effort”
+
+Azure AI Foundry’s GPT‑5 reasoning models allow you to adjust the reasoning_effort parameter. When set to minimal, parallel tool calling is explicitly disabled, meaning the model might skip invoking tools—even while suggesting it did.
 
 ---
 

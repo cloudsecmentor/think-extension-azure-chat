@@ -1,0 +1,10 @@
+{
+  "deployments": [
+    "gpt-5-chat-deployment",
+    "gpt-5-mini-deployment",
+    "gpt-5-nano-deployment",
+    "gpt-4o-deployment"
+  ],
+  "default_deployment": "gpt-5-chat-deployment"
+}
+
