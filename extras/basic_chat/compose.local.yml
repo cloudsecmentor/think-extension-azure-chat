@@ -5,8 +5,12 @@ services:
     container_name: think-front
     env_file:
       - ../.env
+    environment:
+      - CHAT_DB_PATH=/data/chat.db
     ports:
       - "8501:8501"
+    volumes:
+      - ./data:/data
     networks:
       - app
 

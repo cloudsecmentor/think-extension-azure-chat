@@ -17,7 +17,10 @@ set -euo pipefail
 #     [--resource-group rg-pd-cmn] \
 #     [--app-service-plan asp-pd-cmn] \
 #     [--image-tag $(date +%Y%m%d%H%M%S)] \
-#     [--env-file ../.env]
+#     [--env-file ../.env] \
+#     [--storage-account <storage_account_name>] \
+#     [--file-share <file_share_name>] \
+#     [--storage-location eastus]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRONT_DIR="${SCRIPT_DIR}/../front"
@@ -30,6 +33,12 @@ APP_NAME="think-front"
 ACR_NAME="acrpdcmn01"
 IMAGE_TAG="$(date +%Y%m%d%H%M%S)"
 ENV_FILE="${SCRIPT_DIR}/../.env"
+
+# Storage defaults
+STORAGE_ACCOUNT="stachatapp01"
+FILE_SHARE_NAME="chatdata01"
+STORAGE_LOCATION="swedencentral "
+STORAGE_SKU="Standard_RAGRS"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -47,8 +56,14 @@ while [[ $# -gt 0 ]]; do
       IMAGE_TAG="$2"; shift 2 ;;
     --env-file)
       ENV_FILE="$2"; shift 2 ;;
+    --storage-account)
+      STORAGE_ACCOUNT="$2"; shift 2 ;;
+    --file-share)
+      FILE_SHARE_NAME="$2"; shift 2 ;;
+    --storage-location)
+      STORAGE_LOCATION="$2"; shift 2 ;;
     -h|--help)
-      sed -n '1,80p' "$0"; exit 0 ;;
+      sed -n '1,120p' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
@@ -63,12 +78,23 @@ if [[ ! -d "${FRONT_DIR}" ]]; then
   exit 3
 fi
 
+# Sanitize storage account name constraints: 3-24 chars, lowercase letters and numbers only
+SANITIZED_APP_NAME=$(echo -n "${APP_NAME}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9')
+if [[ ${#SANITIZED_APP_NAME} -gt 12 ]]; then
+  SANITIZED_APP_NAME=${SANITIZED_APP_NAME:0:12}
+fi
+DEFAULT_STORAGE_ACCOUNT="${SANITIZED_APP_NAME}st"
+# If user didn't override the default, use sanitized default
+if [[ "${STORAGE_ACCOUNT}" == "thinkfrontst" ]]; then
+  STORAGE_ACCOUNT="${DEFAULT_STORAGE_ACCOUNT}"
+fi
+
 echo "[INFO] Using subscription: ${SUBSCRIPTION_ID}"
 az account set --subscription "${SUBSCRIPTION_ID}"
 
 echo "[INFO] Ensuring resource group exists: ${RESOURCE_GROUP}"
 az group show -n "${RESOURCE_GROUP}" >/dev/null 2>&1 || \
-  az group create -n "${RESOURCE_GROUP}" -l "eastus"
+  az group create -n "${RESOURCE_GROUP}" -l "${STORAGE_LOCATION}"
 
 echo "[INFO] Ensuring ACR exists: ${ACR_NAME}"
 az acr show -n "${ACR_NAME}" -g "${RESOURCE_GROUP}" >/dev/null 2>&1 || \
@@ -78,6 +104,22 @@ ACR_LOGIN_SERVER="$(az acr show -n "${ACR_NAME}" -g "${RESOURCE_GROUP}" --query 
 ACR_ID="$(az acr show -n "${ACR_NAME}" -g "${RESOURCE_GROUP}" --query id -o tsv)"
 IMAGE_NAME="${ACR_LOGIN_SERVER}/${APP_NAME}:${IMAGE_TAG}"
 
+# Ensure Storage Account and File Share for persistent /data
+echo "[INFO] Ensuring Storage Account exists: ${STORAGE_ACCOUNT} (location=${STORAGE_LOCATION})"
+az storage account show -n "${STORAGE_ACCOUNT}" -g "${RESOURCE_GROUP}" >/dev/null 2>&1 || \
+  az storage account create -n "${STORAGE_ACCOUNT}" -g "${RESOURCE_GROUP}" -l "${STORAGE_LOCATION}" --sku "${STORAGE_SKU}" >/dev/null
+
+STORAGE_KEY="$(az storage account keys list -n "${STORAGE_ACCOUNT}" -g "${RESOURCE_GROUP}" --query "[0].value" -o tsv)"
+if [[ -z "${STORAGE_KEY}" ]]; then
+  echo "[ERROR] Could not retrieve storage account key for ${STORAGE_ACCOUNT}" >&2
+  exit 8
+fi
+
+echo "[INFO] Ensuring Azure File Share exists: ${FILE_SHARE_NAME}"
+az storage share-rm show --storage-account "${STORAGE_ACCOUNT}" --name "${FILE_SHARE_NAME}" >/dev/null 2>&1 || \
+  az storage share create --name "${FILE_SHARE_NAME}" --account-name "${STORAGE_ACCOUNT}" --account-key "${STORAGE_KEY}" >/dev/null
+
+# Build and push image
 echo "[INFO] Building Docker image: ${IMAGE_NAME}"
 docker build -t "${IMAGE_NAME}" "${FRONT_DIR}"
 
@@ -122,6 +164,17 @@ else
     -n "${APP_NAME}" \
     --runtime "PYTHON:3.11"
 fi
+
+# Mount Azure File Share at /data
+echo "[INFO] Mounting Azure File Share '${FILE_SHARE_NAME}' at /data on Web App"
+az webapp config storage-account add \
+  -g "${RESOURCE_GROUP}" -n "${APP_NAME}" \
+  --custom-id data \
+  --storage-type AzureFiles \
+  --account-name "${STORAGE_ACCOUNT}" \
+  --share-name "${FILE_SHARE_NAME}" \
+  --access-key "${STORAGE_KEY}" \
+  --mount-path /data >/dev/null
 
 echo "[INFO] Enabling system-assigned managed identity on Web App"
 az webapp identity assign -g "${RESOURCE_GROUP}" -n "${APP_NAME}" >/dev/null
@@ -183,8 +236,8 @@ JSON
 echo "[INFO] Switching Web App to Sidecar mode"
 az webapp config set --resource-group "${RESOURCE_GROUP}" --name "${APP_NAME}" --linux-fx-version "sitecontainers" >/dev/null
 
-echo "[INFO] Applying application settings (including WEBSITES_PORT=8501)"
-SETTINGS=(WEBSITES_PORT=8501)
+echo "[INFO] Applying application settings (including WEBSITES_PORT=8501 and CHAT_DB_PATH)"
+SETTINGS=(WEBSITES_PORT=8501 CHAT_DB_PATH=/data/chat.db)
 if [[ -f "${ENV_FILE}" ]]; then
   while IFS= read -r line || [[ -n "$line" ]]; do
     # skip comments and empty lines
