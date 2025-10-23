@@ -181,6 +181,7 @@ flowchart TD
   subgraph "Think Container"
     C
     D1
+    AOAI
   end
   C --> |updates and final answer| E
 
