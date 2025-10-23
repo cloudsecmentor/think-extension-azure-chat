@@ -171,18 +171,18 @@ This is an extension of the image from [azurechat](https://github.com/microsoft/
 
 ```mermaid
 flowchart TD
-  A[AzureChat] --> |send history and request, userid and chatid| B[Think Extension API]
-  A --> |chat history| E[(Cosmos DB)]
-  B -->|create think-container| C[Agent Container]
+  A[AzureChat] --> |send history and request, recieve Request ID| B[Think Extension API]
+  B -->|forwards request| C[Agent Container]
   C --> AOAI[(Azure OpenAI Foundry)]
   C <--> D1[MCP Container: Web Search, Date]
-  B -->|return infromation that process has started| A 
+  A <-->|poll with Request ID until retrieves final answer, result displayed in AzureChat| B
 
-  subgraph "Think Container"
+  subgraph "Web App: Think Extension"
+    direction TB
+    B
     C
     D1
   end
-  C --> |updates and final answer| E
 
   classDef optional stroke-dasharray: 5 5,stroke-width:1.5px;
 
