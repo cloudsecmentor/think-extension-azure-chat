@@ -1,0 +1,4 @@
+fastapi
+uvicorn[standard]
+azure-cosmos>=4.6.0,<5
+python-dotenv>=1.0.1
