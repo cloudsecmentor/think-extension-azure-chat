@@ -4,19 +4,20 @@ docker build -t think-container:latest . && docker run --rm --env-file .env thin
 
 
 # to build and push
-az acr login --name crvo2gj2ngdhely
+``` bash
+# TO START DOCKER DEAMON
+# colima start
+acrname=""
+imagename=""
+az acr login --name $acrname
+docker buildx build --platform linux/amd64 -t $acrname.azurecr.io/$imagename:latest --no-cache -f Dockerfile .
+docker push $acrname.azurecr.io/$imagename:latest
 
-container_name=think-container:latest
-docker buildx build --platform linux/amd64 -t crvo2gj2ngdhely.azurecr.io/$container_name --no-cache -f Dockerfile .
-docker push crvo2gj2ngdhely.azurecr.io/$container_name
+```
 
 
 # container app env
-created resources
-- workspace-rgbackendnprfdqy
-- think-container-npr
-
 az containerapp env create \
-    --name "think-container-npr" \
-    --resource-group "rg-backend-npr" \
+    --name "app_env_name" \
+    --resource-group "rg-name" \
     --location "West Europe"
